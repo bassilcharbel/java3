@@ -153,6 +153,48 @@ class ContactsFrame extends JFrame {
         searchTXT = new JTextArea();
         searchTXT.setBounds(290, 35, 100, 15);
         add(searchTXT);
+
+        // ActionListener for Sort by First Name
+        srtFnBTN.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                if (contactsSet == null || contactsSet.isEmpty()) {
+                    return;
+                }
+                List<Contact> sortedList = new ArrayList<>(contactsSet);
+                Collections.sort(sortedList, Contact.FirstNameComparator);
+                contactsSet.clear();
+                contactsSet.addAll(sortedList);
+                refreshContactsListModel();
+            }
+        });
+
+        // ActionListener for Sort by Last Name
+        srtLnBTN.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                if (contactsSet == null || contactsSet.isEmpty()) {
+                    return;
+                }
+                List<Contact> sortedList = new ArrayList<>(contactsSet);
+                Collections.sort(sortedList, Contact.LastNameComparator);
+                contactsSet.clear();
+                contactsSet.addAll(sortedList);
+                refreshContactsListModel();
+            }
+        });
+
+        // ActionListener for Sort by City
+        srtCyBTN.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                if (contactsSet == null || contactsSet.isEmpty()) {
+                    return;
+                }
+                List<Contact> sortedList = new ArrayList<>(contactsSet);
+                Collections.sort(sortedList, Contact.CityComparator);
+                contactsSet.clear();
+                contactsSet.addAll(sortedList);
+                refreshContactsListModel();
+            }
+        });
         
         // Load initial data when ContactsFrame is created
         loadContactsFromFile();
@@ -209,10 +251,9 @@ class ContactsFrame extends JFrame {
         contactsLSTMDL.clear();
         for (Contact c : contactsSet) { // Iteration order from TreeSet is sorted
             if (!c.getPhoneNumbers().isEmpty()) {
-                PhoneNumber firstPn = c.getPhoneNumbers().get(0);
-                contactsLSTMDL.addElement(firstPn.getFirstName() + " " + firstPn.getLastName() + " - " + firstPn.getCity());
+                contactsLSTMDL.addElement(c.getFirstName() + " " + c.getLastName() + " - " + c.getCity());
             } else {
-                contactsLSTMDL.addElement("Contact (No Numbers)"); // Should ideally not happen if validation is correct
+                contactsLSTMDL.addElement(c.getFirstName() + " " + c.getLastName() + " - " + c.getCity() + " (No Numbers)");
             }
         }
     }
@@ -368,18 +409,29 @@ class AddNewContactFrame extends JFrame {
         if (oldContact == null) return;
         List<PhoneNumber> pns = oldContact.getPhoneNumbers();
         
-        fnTXT.setText(""); lnTXT.setText(""); ctyTXT.setText("");
         ctsModel.setRowCount(0);
-        if (!pns.isEmpty()) {
-            PhoneNumber pn = pns.get(0);
-            fnTXT.setText(pn.getFirstName());
-            lnTXT.setText(pn.getLastName());
-            ctyTXT.setText(pn.getCity());
-        }
+        // fnTXT.setText(""); lnTXT.setText(""); ctyTXT.setText(""); // Cleared before setting
+        fnTXT.setText(oldContact.getFirstName());
+        lnTXT.setText(oldContact.getLastName());
+        ctyTXT.setText(oldContact.getCity());
+
         for (PhoneNumber pn : pns) {
             ctsModel.addRow(new Object[]{pn.getRegion(), pn.getPnbr()});
         }
-        // TODO: Group checkbox prefill
+        
+        // Pre-select group checkboxes
+        if (oldContact != null) { // Ensure oldContact is not null
+            famCHK.setSelected(oldContact.isInGroup("Family"));
+            FrndCHK.setSelected(oldContact.isInGroup("Friends"));
+            workCHK.setSelected(oldContact.isInGroup("Co-Workers"));
+            grpCHK.setSelected(oldContact.getGroups().isEmpty()); // Simpler logic for "No Group"
+        } else {
+            // Default state if oldContact is somehow null
+            grpCHK.setSelected(true);
+            famCHK.setSelected(false);
+            FrndCHK.setSelected(false);
+            workCHK.setSelected(false);
+        }
     }
 
     private void clearFormForNew() { 
@@ -408,17 +460,29 @@ class AddNewContactFrame extends JFrame {
             String region = (String) ctsModel.getValueAt(i, 0);
             String pnbr = (String) ctsModel.getValueAt(i, 1);
             if (pnbr != null && !pnbr.trim().isEmpty()) {
-                pnbrSet.add(new PhoneNumber(pnbr, city, firstName, lastName, region));
+                pnbrSet.add(new PhoneNumber(pnbr, region));
             }
         }
         if (pnbrSet.isEmpty()) {
             JOptionPane.showMessageDialog(this, "At least one phone number is required.");
             return;
         }
-        Contact currentContact = new Contact();
+        Contact currentContact = new Contact(firstName, lastName, city);
         for (PhoneNumber p : pnbrSet) {
             currentContact.addPhoneNumber(p);
         }
+
+        // Add selected groups
+        if (famCHK.isSelected()) {
+            currentContact.addGroup("Family");
+        }
+        if (FrndCHK.isSelected()) {
+            currentContact.addGroup("Friends");
+        }
+        if (workCHK.isSelected()) {
+            currentContact.addGroup("Co-Workers");
+        }
+        // grpCHK (No Group) is handled by the absence of other selections.
 
         boolean success = false;
         String listDisplayString = firstName + " " + lastName + " - " + city;
@@ -493,10 +557,9 @@ class AddNewContactFrame extends JFrame {
         contactsLSTMDL.clear();
         for (Contact c : contactsSet) {
             if (!c.getPhoneNumbers().isEmpty()) {
-                PhoneNumber firstPn = c.getPhoneNumbers().get(0);
-                contactsLSTMDL.addElement(firstPn.getFirstName() + " " + firstPn.getLastName() + " - " + firstPn.getCity());
+                contactsLSTMDL.addElement(c.getFirstName() + " " + c.getLastName() + " - " + c.getCity());
             } else {
-                contactsLSTMDL.addElement("Contact (No Numbers)");
+                contactsLSTMDL.addElement(c.getFirstName() + " " + c.getLastName() + " - " + c.getCity() + " (No Numbers)");
             }
         }
     }
@@ -533,9 +596,8 @@ class UpdateContactFrame extends JFrame {
         add(updateLBL);
 
         String displayName = "Contact";
-        if (contactToUpdate != null && !contactToUpdate.getPhoneNumbers().isEmpty()) {
-            PhoneNumber firstPn = contactToUpdate.getPhoneNumbers().get(0);
-            displayName = firstPn.getFirstName() + " " + firstPn.getLastName();
+        if (contactToUpdate != null) {
+            displayName = contactToUpdate.getFirstName() + " " + contactToUpdate.getLastName();
         }
         newLBL = new JLabel("Editing: " + displayName);
         newLBL.setBounds(15, 50, 250, 15);
@@ -614,20 +676,31 @@ class UpdateContactFrame extends JFrame {
         if (contactToUpdate == null) return;
         List<PhoneNumber> pns = contactToUpdate.getPhoneNumbers();
         ctsModel.setRowCount(0);
+
+        fnTXT.setText(contactToUpdate.getFirstName());
+        lnTXT.setText(contactToUpdate.getLastName());
+        ctyTXT.setText(contactToUpdate.getCity());
+
         if (!pns.isEmpty()) {
-            PhoneNumber firstPn = pns.get(0);
-            fnTXT.setText(firstPn.getFirstName());
-            lnTXT.setText(firstPn.getLastName());
-            ctyTXT.setText(firstPn.getCity());
             for (PhoneNumber pn : pns) {
                 ctsModel.addRow(new Object[]{pn.getRegion(), pn.getPnbr()});
             }
-        } else { // If contact has no numbers, still fill name/city if possible (though unlikely)
-             fnTXT.setText(contactToUpdate.getPhoneNumbers().isEmpty() ? "" : contactToUpdate.getPhoneNumbers().get(0).getFirstName()); // Example, adapt if Contact has direct name/city fields
-             lnTXT.setText(contactToUpdate.getPhoneNumbers().isEmpty() ? "" : contactToUpdate.getPhoneNumbers().get(0).getLastName());
-             ctyTXT.setText(contactToUpdate.getPhoneNumbers().isEmpty() ? "" : contactToUpdate.getPhoneNumbers().get(0).getCity());
         }
-        // TODO: Implement group checkbox state loading from contactToUpdate
+        // No need for the 'else' block to set names/city from phone numbers as it's done directly from contactToUpdate above
+        
+        // Pre-select group checkboxes
+        if (contactToUpdate != null) { // Ensure contactToUpdate is not null
+            famCHK.setSelected(contactToUpdate.isInGroup("Family"));
+            FrndCHK.setSelected(contactToUpdate.isInGroup("Friends"));
+            workCHK.setSelected(contactToUpdate.isInGroup("Co-Workers"));
+            grpCHK.setSelected(contactToUpdate.getGroups().isEmpty()); // "No Group" if no specific groups
+        } else {
+            // Default state if contactToUpdate is somehow null (should not happen here)
+            grpCHK.setSelected(true);
+            famCHK.setSelected(false);
+            FrndCHK.setSelected(false);
+            workCHK.setSelected(false);
+        }
     }
 
     public void saveUpdatedContact() { // Changed to public for testing
@@ -643,17 +716,31 @@ class UpdateContactFrame extends JFrame {
             String region = (String) ctsModel.getValueAt(i, 0);
             String pnbr = (String) ctsModel.getValueAt(i, 1);
             if (pnbr != null && !pnbr.trim().isEmpty()) {
-                pnbrSet.add(new PhoneNumber(pnbr, city, firstName, lastName, region));
+                pnbrSet.add(new PhoneNumber(pnbr, region));
             }
         }
         if (pnbrSet.isEmpty()) {
             JOptionPane.showMessageDialog(this, "At least one phone number is required.");
             return;
         }
-        Contact updatedContact = new Contact();
+        Contact updatedContact = new Contact(firstName, lastName, city);
         for (PhoneNumber p : pnbrSet) {
             updatedContact.addPhoneNumber(p);
         }
+
+        // Add selected groups
+        // Since updatedContact is a new Contact object, its 'groups' field is a new HashSet.
+        // No need to clear groups explicitly here.
+        if (famCHK.isSelected()) {
+            updatedContact.addGroup("Family");
+        }
+        if (FrndCHK.isSelected()) {
+            updatedContact.addGroup("Friends");
+        }
+        if (workCHK.isSelected()) {
+            updatedContact.addGroup("Co-Workers");
+        }
+        // grpCHK (No Group) is handled by the absence of other selections.
 
         // Critical: remove the original instance, then add the new one.
         if (contactsSet.remove(contactToUpdate)) {

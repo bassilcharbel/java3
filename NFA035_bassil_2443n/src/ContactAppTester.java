@@ -107,10 +107,9 @@ public class ContactAppTester {
         listModel.clear();
         for (Contact c : contacts) {
             if (!c.getPhoneNumbers().isEmpty()) {
-                PhoneNumber firstPn = c.getPhoneNumbers().get(0);
-                listModel.addElement(firstPn.getFirstName() + " " + firstPn.getLastName() + " - " + firstPn.getCity());
+                listModel.addElement(c.getFirstName() + " " + c.getLastName() + " - " + c.getCity());
             } else {
-                listModel.addElement("Contact (No Numbers)");
+                listModel.addElement(c.getFirstName() + " " + c.getLastName() + " - " + c.getCity() + " (No Numbers)");
             }
         }
     }
@@ -128,9 +127,9 @@ public class ContactAppTester {
         String lastName = "Doe";
         String city = "TestCity";
         TreeSet<PhoneNumber> pnbrSet = new TreeSet<>();
-        pnbrSet.add(new PhoneNumber("555-0101", city, firstName, lastName, "123"));
+        pnbrSet.add(new PhoneNumber("555-0101", "123"));
         
-        Contact newContact = new Contact();
+        Contact newContact = new Contact(firstName, lastName, city);
         for (PhoneNumber p : pnbrSet) {
             newContact.addPhoneNumber(p);
         }
@@ -156,7 +155,7 @@ public class ContactAppTester {
              throw new RuntimeException("testSaveNewContact: sharedContactsLSTMDL size should be 1, but was " + sharedContactsLSTMDL.getSize());
         }
         Contact savedContact = sharedContactsSet.iterator().next();
-        if (!savedContact.getPhoneNumbers().get(0).getFirstName().equals("John")) {
+        if (!savedContact.getFirstName().equals("John")) {
             throw new RuntimeException("testSaveNewContact: Saved contact first name mismatch.");
         }
 
@@ -172,7 +171,7 @@ public class ContactAppTester {
             throw new RuntimeException("testSaveNewContact: Reloaded contactsLSTMDL size should be 1, but was " + reloadedLSTMDL.getSize());
         }
         Contact reloadedContact = reloadedContactsSet.iterator().next();
-        if (!reloadedContact.getPhoneNumbers().get(0).getFirstName().equals("John")) {
+        if (!reloadedContact.getFirstName().equals("John")) {
             throw new RuntimeException("testSaveNewContact: Reloaded contact first name mismatch.");
         }
         if (!reloadedLSTMDL.getElementAt(0).contains("John Doe - TestCity")) {
@@ -184,13 +183,13 @@ public class ContactAppTester {
         prepareTestFile();
 
         Set<Contact> predefinedContacts = new TreeSet<>();
-        Contact c1 = new Contact();
-        c1.addPhoneNumber(new PhoneNumber("111-2222", "CityA", "Alice", "Smith", "001"));
+        Contact c1 = new Contact("Alice", "Smith", "CityA");
+        c1.addPhoneNumber(new PhoneNumber("111-2222", "001"));
         predefinedContacts.add(c1);
 
-        Contact c2 = new Contact();
-        c2.addPhoneNumber(new PhoneNumber("333-4444", "CityB", "Bob", "Jones", "002"));
-        c2.addPhoneNumber(new PhoneNumber("555-6666", "CityB", "Bob", "Jones", "003"));
+        Contact c2 = new Contact("Bob", "Jones", "CityB");
+        c2.addPhoneNumber(new PhoneNumber("333-4444", "002"));
+        c2.addPhoneNumber(new PhoneNumber("555-6666", "003"));
         predefinedContacts.add(c2);
 
         writeContactsToFileHelper(predefinedContacts, TEST_CONTACT_FILE);
@@ -208,10 +207,10 @@ public class ContactAppTester {
 
         boolean foundAlice = false, foundBob = false;
         for (Contact c : loadedContactsSet) {
-            if (c.getPhoneNumbers().get(0).getFirstName().equals("Alice")) {
+            if (c.getFirstName().equals("Alice")) {
                 foundAlice = true;
                 if (c.getPhoneNumbers().size() != 1) throw new RuntimeException("testLoadContacts: Alice should have 1 number.");
-            } else if (c.getPhoneNumbers().get(0).getFirstName().equals("Bob")) {
+            } else if (c.getFirstName().equals("Bob")) {
                 foundBob = true;
                 if (c.getPhoneNumbers().size() != 2) throw new RuntimeException("testLoadContacts: Bob should have 2 numbers.");
             }
@@ -225,8 +224,8 @@ public class ContactAppTester {
         prepareTestFile();
 
         Set<Contact> initialContacts = new TreeSet<>();
-        Contact contactToEdit = new Contact();
-        contactToEdit.addPhoneNumber(new PhoneNumber("777-8888", "OldCity", "Charlie", "Brown", "007"));
+        Contact contactToEdit = new Contact("Charlie", "Brown", "OldCity");
+        contactToEdit.addPhoneNumber(new PhoneNumber("777-8888", "007"));
         initialContacts.add(contactToEdit);
         writeContactsToFileHelper(initialContacts, TEST_CONTACT_FILE);
 
@@ -237,7 +236,7 @@ public class ContactAppTester {
         // Get the contact to update (assuming it's the first/only one for simplicity)
         Contact originalContact = null;
         for(Contact c : sharedContactsSet) { // Find Charlie Brown
-            if(c.getPhoneNumbers().get(0).getFirstName().equals("Charlie")) {
+            if(c.getFirstName().equals("Charlie")) {
                 originalContact = c;
                 break;
             }
@@ -260,9 +259,9 @@ public class ContactAppTester {
         String updatedLastName = "Brown"; // Assuming last name remains same
         String updatedCity = "NewCity";
         TreeSet<PhoneNumber> updatedPnbrSet = new TreeSet<>();
-        updatedPnbrSet.add(new PhoneNumber("777-8888", updatedCity, updatedFirstName, updatedLastName, "007")); // Phone number string same, city/name updated
+        updatedPnbrSet.add(new PhoneNumber("777-8888", "007")); // Phone number string same, city/name updated
 
-        Contact updatedContact = new Contact();
+        Contact updatedContact = new Contact(updatedFirstName, updatedLastName, updatedCity);
         for (PhoneNumber p : updatedPnbrSet) {
             updatedContact.addPhoneNumber(p);
         }
@@ -286,10 +285,10 @@ public class ContactAppTester {
             throw new RuntimeException("testUpdateContact: contactsSet size should still be 1 after update, but was " + sharedContactsSet.size());
         }
         Contact updatedContactInSet = sharedContactsSet.iterator().next(); // Assuming only one contact
-        if (!updatedContactInSet.getPhoneNumbers().get(0).getFirstName().equals("Charles")) {
-            throw new RuntimeException("testUpdateContact: Updated contact first name mismatch in set. Expected Charles, got " + updatedContactInSet.getPhoneNumbers().get(0).getFirstName());
+        if (!updatedContactInSet.getFirstName().equals("Charles")) {
+            throw new RuntimeException("testUpdateContact: Updated contact first name mismatch in set. Expected Charles, got " + updatedContactInSet.getFirstName());
         }
-        if (!updatedContactInSet.getPhoneNumbers().get(0).getCity().equals("NewCity")) {
+        if (!updatedContactInSet.getCity().equals("NewCity")) {
             throw new RuntimeException("testUpdateContact: Updated contact city mismatch in set.");
         }
         if (!sharedContactsLSTMDL.getElementAt(originalContactIndex).contains("Charles Brown - NewCity")) {
@@ -301,7 +300,7 @@ public class ContactAppTester {
             throw new RuntimeException("testUpdateContact: Reloaded contactsSet size should be 1, but was " + reloadedContactsSet.size());
         }
         Contact reloadedContact = reloadedContactsSet.iterator().next();
-        if (!reloadedContact.getPhoneNumbers().get(0).getFirstName().equals("Charles")) {
+        if (!reloadedContact.getFirstName().equals("Charles")) {
             throw new RuntimeException("testUpdateContact: Reloaded contact first name mismatch.");
         }
     }
