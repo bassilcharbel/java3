@@ -82,7 +82,7 @@ class ContactsFrame extends JFrame {
     AddNewContactFrame nwctf; // Should be initialized when needed
     JList<String> contactsInfoLST;
     JTextArea cyanTXT, searchTXT;
-    JButton srtFnBTN, srtLnBTN, srtCyBTN, newCBTN, viewBTN, updateBTN, deleteBTN, readBTN;
+    JButton srtFnBTN, srtLnBTN, srtCyBTN, newCBTN, viewBTN, updateBTN, deleteBTN, readBTN, searchBTN; 
     JLabel contactLBL, gestionCLBL, searchLBL;
     JScrollPane scrollPane; // This was declared but not added to the frame in the original code.
 
@@ -154,6 +154,10 @@ class ContactsFrame extends JFrame {
         searchTXT.setBounds(290, 35, 100, 15);
         add(searchTXT);
 
+        searchBTN = new JButton("Search");
+        searchBTN.setBounds(400, 33, 80, 20); // Position it next to searchTXT
+        add(searchBTN);
+
         // ActionListener for Sort by First Name
         srtFnBTN.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
@@ -193,6 +197,40 @@ class ContactsFrame extends JFrame {
                 contactsSet.clear();
                 contactsSet.addAll(sortedList);
                 refreshContactsListModel();
+            }
+        });
+
+        searchBTN.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                String searchTerm = searchTXT.getText().trim().toLowerCase();
+                contactsLSTMDL.clear(); // Clear the JList model
+
+                if (searchTerm.isEmpty()) {
+                    // If search term is empty, refresh with all contacts from the original set
+                    // The existing refreshContactsListModel() iterates contactsSet, which is fine.
+                    // However, refreshContactsListModel itself clears and repopulates from contactsSet.
+                    // To avoid double clearing or issues if refreshContactsListModel changes,
+                    // it's safer to just call it.
+                    refreshContactsListModel(); // This will show all contacts in their current sort order from contactsSet
+                } else {
+                    List<Contact> filteredContacts = new ArrayList<>();
+                    for (Contact c : contactsSet) {
+                        if (c.getFirstName() != null && c.getFirstName().toLowerCase().contains(searchTerm)) {
+                            filteredContacts.add(c);
+                        }
+                    }
+                    // Optional: Sort filteredContacts if a specific order is desired for search results
+                    // For now, they will appear in the order they are found in contactsSet (which is a TreeSet)
+                    // Collections.sort(filteredContacts); // Example if you want natural sort of filtered results
+
+                    for (Contact c : filteredContacts) {
+                        if (!c.getPhoneNumbers().isEmpty()) {
+                            contactsLSTMDL.addElement(c.getFirstName() + " " + c.getLastName() + " - " + c.getCity());
+                        } else {
+                            contactsLSTMDL.addElement(c.getFirstName() + " " + c.getLastName() + " - " + c.getCity() + " (No Numbers)");
+                        }
+                    }
+                }
             }
         });
         
