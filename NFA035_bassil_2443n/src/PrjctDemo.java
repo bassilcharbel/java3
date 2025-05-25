@@ -209,10 +209,9 @@ class ContactsFrame extends JFrame {
         contactsLSTMDL.clear();
         for (Contact c : contactsSet) { // Iteration order from TreeSet is sorted
             if (!c.getPhoneNumbers().isEmpty()) {
-                PhoneNumber firstPn = c.getPhoneNumbers().get(0);
-                contactsLSTMDL.addElement(firstPn.getFirstName() + " " + firstPn.getLastName() + " - " + firstPn.getCity());
+                contactsLSTMDL.addElement(c.getFirstName() + " " + c.getLastName() + " - " + c.getCity());
             } else {
-                contactsLSTMDL.addElement("Contact (No Numbers)"); // Should ideally not happen if validation is correct
+                contactsLSTMDL.addElement(c.getFirstName() + " " + c.getLastName() + " - " + c.getCity() + " (No Numbers)");
             }
         }
     }
@@ -368,14 +367,12 @@ class AddNewContactFrame extends JFrame {
         if (oldContact == null) return;
         List<PhoneNumber> pns = oldContact.getPhoneNumbers();
         
-        fnTXT.setText(""); lnTXT.setText(""); ctyTXT.setText("");
         ctsModel.setRowCount(0);
-        if (!pns.isEmpty()) {
-            PhoneNumber pn = pns.get(0);
-            fnTXT.setText(pn.getFirstName());
-            lnTXT.setText(pn.getLastName());
-            ctyTXT.setText(pn.getCity());
-        }
+        // fnTXT.setText(""); lnTXT.setText(""); ctyTXT.setText(""); // Cleared before setting
+        fnTXT.setText(oldContact.getFirstName());
+        lnTXT.setText(oldContact.getLastName());
+        ctyTXT.setText(oldContact.getCity());
+
         for (PhoneNumber pn : pns) {
             ctsModel.addRow(new Object[]{pn.getRegion(), pn.getPnbr()});
         }
@@ -408,14 +405,14 @@ class AddNewContactFrame extends JFrame {
             String region = (String) ctsModel.getValueAt(i, 0);
             String pnbr = (String) ctsModel.getValueAt(i, 1);
             if (pnbr != null && !pnbr.trim().isEmpty()) {
-                pnbrSet.add(new PhoneNumber(pnbr, city, firstName, lastName, region));
+                pnbrSet.add(new PhoneNumber(pnbr, region));
             }
         }
         if (pnbrSet.isEmpty()) {
             JOptionPane.showMessageDialog(this, "At least one phone number is required.");
             return;
         }
-        Contact currentContact = new Contact();
+        Contact currentContact = new Contact(firstName, lastName, city);
         for (PhoneNumber p : pnbrSet) {
             currentContact.addPhoneNumber(p);
         }
@@ -493,10 +490,9 @@ class AddNewContactFrame extends JFrame {
         contactsLSTMDL.clear();
         for (Contact c : contactsSet) {
             if (!c.getPhoneNumbers().isEmpty()) {
-                PhoneNumber firstPn = c.getPhoneNumbers().get(0);
-                contactsLSTMDL.addElement(firstPn.getFirstName() + " " + firstPn.getLastName() + " - " + firstPn.getCity());
+                contactsLSTMDL.addElement(c.getFirstName() + " " + c.getLastName() + " - " + c.getCity());
             } else {
-                contactsLSTMDL.addElement("Contact (No Numbers)");
+                contactsLSTMDL.addElement(c.getFirstName() + " " + c.getLastName() + " - " + c.getCity() + " (No Numbers)");
             }
         }
     }
@@ -533,9 +529,8 @@ class UpdateContactFrame extends JFrame {
         add(updateLBL);
 
         String displayName = "Contact";
-        if (contactToUpdate != null && !contactToUpdate.getPhoneNumbers().isEmpty()) {
-            PhoneNumber firstPn = contactToUpdate.getPhoneNumbers().get(0);
-            displayName = firstPn.getFirstName() + " " + firstPn.getLastName();
+        if (contactToUpdate != null) {
+            displayName = contactToUpdate.getFirstName() + " " + contactToUpdate.getLastName();
         }
         newLBL = new JLabel("Editing: " + displayName);
         newLBL.setBounds(15, 50, 250, 15);
@@ -614,19 +609,17 @@ class UpdateContactFrame extends JFrame {
         if (contactToUpdate == null) return;
         List<PhoneNumber> pns = contactToUpdate.getPhoneNumbers();
         ctsModel.setRowCount(0);
+
+        fnTXT.setText(contactToUpdate.getFirstName());
+        lnTXT.setText(contactToUpdate.getLastName());
+        ctyTXT.setText(contactToUpdate.getCity());
+
         if (!pns.isEmpty()) {
-            PhoneNumber firstPn = pns.get(0);
-            fnTXT.setText(firstPn.getFirstName());
-            lnTXT.setText(firstPn.getLastName());
-            ctyTXT.setText(firstPn.getCity());
             for (PhoneNumber pn : pns) {
                 ctsModel.addRow(new Object[]{pn.getRegion(), pn.getPnbr()});
             }
-        } else { // If contact has no numbers, still fill name/city if possible (though unlikely)
-             fnTXT.setText(contactToUpdate.getPhoneNumbers().isEmpty() ? "" : contactToUpdate.getPhoneNumbers().get(0).getFirstName()); // Example, adapt if Contact has direct name/city fields
-             lnTXT.setText(contactToUpdate.getPhoneNumbers().isEmpty() ? "" : contactToUpdate.getPhoneNumbers().get(0).getLastName());
-             ctyTXT.setText(contactToUpdate.getPhoneNumbers().isEmpty() ? "" : contactToUpdate.getPhoneNumbers().get(0).getCity());
         }
+        // No need for the 'else' block to set names/city from phone numbers as it's done directly from contactToUpdate above
         // TODO: Implement group checkbox state loading from contactToUpdate
     }
 
@@ -643,14 +636,14 @@ class UpdateContactFrame extends JFrame {
             String region = (String) ctsModel.getValueAt(i, 0);
             String pnbr = (String) ctsModel.getValueAt(i, 1);
             if (pnbr != null && !pnbr.trim().isEmpty()) {
-                pnbrSet.add(new PhoneNumber(pnbr, city, firstName, lastName, region));
+                pnbrSet.add(new PhoneNumber(pnbr, region));
             }
         }
         if (pnbrSet.isEmpty()) {
             JOptionPane.showMessageDialog(this, "At least one phone number is required.");
             return;
         }
-        Contact updatedContact = new Contact();
+        Contact updatedContact = new Contact(firstName, lastName, city);
         for (PhoneNumber p : pnbrSet) {
             updatedContact.addPhoneNumber(p);
         }
