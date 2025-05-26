@@ -384,7 +384,7 @@ class ContactsFrame extends JFrame {
     }
 
     // Method to save contactsSet to "contact.dat"
-    private void saveContacts() {
+    public void saveContacts() { // Visibility changed to public
         try (FileOutputStream fos = new FileOutputStream("contact.dat");
              ObjectOutputStream oos = new ObjectOutputStream(fos)) {
             oos.writeObject(contactsSet);
@@ -900,8 +900,8 @@ class GroupMain extends JFrame{
         this.contactsFrameInstance = cFrame;
 		setTitle("group main");
 		setLayout(null);
-		agrp=new AddNewGroup(); // Assuming these don't need contactsFrameInstance immediately
-		ugrp=new UpdateGroup();   // Assuming these don't need contactsFrameInstance immediately
+		agrp=new AddNewGroup(this.contactsFrameInstance); 
+		ugrp=new UpdateGroup();   // Assuming these don't need contactsFrameInstance immediately for now
 		titleLBL=new JLabel("Gestion des contact");
 		titleLBL.setBounds(150,5,150,25);
 		add(titleLBL);
@@ -1027,7 +1027,11 @@ class AddNewGroup extends JFrame{
 	JTextField grpTXT,descTXT;
 	JButton saveBTN,cancelBTN;
 	DefaultTableModel ctsModel;
-	public AddNewGroup() {
+    private ContactsFrame contactsFrameRef; // Added field
+    private List<Contact> displayedContacts = new ArrayList<>(); // Added field to track contacts in table
+
+	public AddNewGroup(ContactsFrame cFrame) { // Modified constructor
+        this.contactsFrameRef = cFrame; // Store the reference
 		setTitle("add new group");
 		setLayout(null);
 		headerLBL=new JLabel("Gestion des contact");
@@ -1045,12 +1049,22 @@ class AddNewGroup extends JFrame{
 		descTXT=new JTextField(150);
 		descTXT.setBounds(220,80,155,25);
 		add(descTXT);
-		ctsModel=new DefaultTableModel();
+		
+        ctsModel = new DefaultTableModel() {
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                if (columnIndex == 2) { // "Add to group" is the 3rd column (index 2)
+                    return Boolean.class;
+                }
+                // Important: call super for other columns to get default behavior
+                return super.getColumnClass(columnIndex); 
+            }
+        };
 		ctsModel.addColumn("contact name");
 		ctsModel.addColumn("City");
 		ctsModel.addColumn("Add to group");
 		ctsiTBL=new JTable(ctsModel);
-		add(ctsiTBL);
+		// add(ctsiTBL); // JTable is added via JScrollPane
 		JScrollPane sp = new JScrollPane(ctsiTBL);
 		sp.setBounds(100,125,260,120);
 		add(sp);
@@ -1060,7 +1074,102 @@ class AddNewGroup extends JFrame{
 		cancelBTN=new JButton("cancel");
 		cancelBTN.setBounds(250,320,75,20);
 		add(cancelBTN);
+
+        saveBTN.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                String groupName = grpTXT.getText().trim();
+                String groupDescription = descTXT.getText().trim(); // Optional, but good to get
+
+                if (groupName.isEmpty()) {
+                    JOptionPane.showMessageDialog(AddNewGroup.this, "Group name cannot be empty.", "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                // (Persistence of the Group object itself is not part of this subtask)
+                // For now, we are focusing on updating contacts' group memberships.
+
+                boolean contactsChanged = false;
+                for (int i = 0; i < ctsModel.getRowCount(); i++) {
+                    Boolean isChecked = (Boolean) ctsModel.getValueAt(i, 2); // Column 2 is "Add to group"
+
+                    if (Boolean.TRUE.equals(isChecked)) { // Check for true to handle potential nulls if table allows
+                        if (i < displayedContacts.size()) { // Safety check
+                            Contact selectedContact = displayedContacts.get(i);
+                            // AddGroup returns true if the group was added (i.e., not already present)
+                            if (selectedContact.addGroup(groupName)) {
+                                contactsChanged = true;
+                            }
+                        }
+                    }
+                }
+
+                if (contactsChanged) {
+                    if (contactsFrameRef != null) {
+                        contactsFrameRef.saveContacts(); // Save the updated contactsSet
+                        JOptionPane.showMessageDialog(AddNewGroup.this, "Group '" + groupName + "' processed and contact memberships updated successfully.", "Success", JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                         JOptionPane.showMessageDialog(AddNewGroup.this, "Error: ContactsFrame reference is missing. Cannot save contact changes.", "Error", JOptionPane.ERROR_MESSAGE);
+                    }
+                } else {
+                    // If no contacts were selected or no changes were made to their group memberships
+                    // (e.g. all selected contacts were already in a group with this name)
+                    // Still, a new group might have been intended.
+                    // For this task, we'll just say "processed" as we don't save the Group object itself yet.
+                    JOptionPane.showMessageDialog(AddNewGroup.this, "Group '" + groupName + "' processed. No new contact memberships were added (or no contacts selected).", "Information", JOptionPane.INFORMATION_MESSAGE);
+                }
+                
+                // Reset fields after saving
+                grpTXT.setText("");
+                descTXT.setText("");
+                populateContactsTable(); // This will repopulate and reset checkboxes by re-adding Boolean.FALSE
+
+                // Optional: If GroupMain needs to be explicitly told to refresh its list of groups
+                // (though current design refreshes GroupMain when it becomes visible / groupBTN is clicked)
+                // you might add a callback or event here. For now, rely on existing refresh.
+            }
+        });
+        
+        populateContactsTable(); // Call after ctsModel is initialized
 	}
+
+    private void populateContactsTable() {
+        if (contactsFrameRef == null || contactsFrameRef.contactsSet == null) {
+            ctsModel.setRowCount(0);
+            displayedContacts.clear(); // Clear the tracking list as well
+            return;
+        }
+        ctsModel.setRowCount(0); // Clear existing rows
+        displayedContacts.clear(); // Clear the tracking list
+        Set<Contact> allContacts = contactsFrameRef.contactsSet;
+
+        if (allContacts != null) {
+            List<Contact> sortedContacts = new ArrayList<>(allContacts);
+            Collections.sort(sortedContacts, new Comparator<Contact>() {
+                public int compare(Contact c1, Contact c2) {
+                    int fnComp = c1.getFirstName().compareToIgnoreCase(c2.getFirstName());
+                    if (fnComp != 0) return fnComp;
+                    return c1.getLastName().compareToIgnoreCase(c2.getLastName());
+                }
+            });
+
+            for (Contact contact : sortedContacts) {
+                ctsModel.addRow(new Object[]{
+                    contact.getFirstName() + " " + contact.getLastName(),
+                    contact.getCity(),
+                    Boolean.FALSE // Initial state for the checkbox
+                });
+                displayedContacts.add(contact); // Track the contact
+            }
+        }
+    }
+
+    @Override
+    public void setVisible(boolean b) {
+        if (b) { // When frame is being made visible
+            populateContactsTable();
+        }
+        super.setVisible(b);
+    }
 }
 
 class UpdateGroup extends JFrame{
