@@ -50,14 +50,18 @@ class mainContact extends JFrame {
         cyanTXT.setEditable(false);
         cyanTXT.setBackground(Color.CYAN);
         add(cyanTXT);
-        grpm=new GroupMain();
-        grpm.setSize(400,400);
-        grpm.setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
-        contactsFrame = new ContactsFrame();
+        
+        contactsFrame = new ContactsFrame(); // Ensure this is initialized first
         contactsFrame.setSize(500, 300);
         contactsFrame.setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
+        
+        grpm = new GroupMain(contactsFrame); // Pass contactsFrame instance
+        grpm.setSize(400,400);
+        grpm.setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
+        
         groupBTN.addActionListener(new ActionListener() {
         	public void actionPerformed(ActionEvent e) {
+                grpm.refreshGroupTable(); // Refresh table before showing
         		grpm.setVisible(true);
         	}
         });
@@ -238,6 +242,66 @@ class ContactsFrame extends JFrame {
         loadContactsFromFile();
         refreshContactsListModel();
 
+        // Add ActionListener for viewBTN
+        viewBTN.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                int selectedIndex = contactsInfoLST.getSelectedIndex();
+                if (selectedIndex == -1) {
+                    JOptionPane.showMessageDialog(ContactsFrame.this, "Please select a contact to view.");
+                } else {
+                    // Retrieve the Contact object from contactsSet
+                    Contact selectedContact = null;
+                    // Iterate through the contactsSet to find the contact at selectedIndex
+                    // This is necessary because contactsSet is a Set and doesn't guarantee order for direct index access
+                    // A common approach is to convert contactsSet to a List or iterate and count
+                    List<Contact> tempList = new ArrayList<>(contactsSet); // Convert to list for indexed access
+                    if (selectedIndex < tempList.size()) {
+                        selectedContact = tempList.get(selectedIndex);
+                    }
+
+                    if (selectedContact != null) {
+                        ViewContactFrame viewFrame = new ViewContactFrame(selectedContact);
+                        viewFrame.setVisible(true);
+                    } else {
+                        JOptionPane.showMessageDialog(ContactsFrame.this, "Error: Could not retrieve selected contact.");
+                    }
+                }
+            }
+        });
+
+        // Add ActionListener for deleteBTN
+        deleteBTN.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                int selectedIndex = contactsInfoLST.getSelectedIndex();
+                if (selectedIndex == -1) {
+                    JOptionPane.showMessageDialog(ContactsFrame.this, "Please select a contact to delete.");
+                } else {
+                    Contact contactToDelete = null;
+                    List<Contact> tempList = new ArrayList<>(contactsSet); // Convert to list for indexed access
+                     if (selectedIndex < tempList.size()) {
+                        contactToDelete = tempList.get(selectedIndex);
+                    }
+
+                    if (contactToDelete != null) {
+                        int confirmation = JOptionPane.showConfirmDialog(ContactsFrame.this,
+                                "Are you sure you want to delete " + contactToDelete.getFirstName() + " " + contactToDelete.getLastName() + "?",
+                                "Confirm Deletion", JOptionPane.YES_NO_OPTION);
+                        if (confirmation == JOptionPane.YES_OPTION) {
+                            if (contactsSet.remove(contactToDelete)) {
+                                contactsLSTMDL.remove(selectedIndex);
+                                saveContacts(); // Persist changes
+                                JOptionPane.showMessageDialog(ContactsFrame.this, "Contact deleted successfully.");
+                            } else {
+                                JOptionPane.showMessageDialog(ContactsFrame.this, "Error: Could not delete contact from the set.");
+                            }
+                        }
+                    } else {
+                         JOptionPane.showMessageDialog(ContactsFrame.this, "Error: Could not retrieve selected contact for deletion.");
+                    }
+                }
+            }
+        });
+
         readBTN.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 loadContactsFromFile();
@@ -311,11 +375,22 @@ class ContactsFrame extends JFrame {
             } else if (loadedData instanceof List) { // Compatibility for old List format
                 contactsSet.addAll((List<Contact>) loadedData);
                 // Optionally, could re-save in Set format here if desired
-                // writeCurrentContactsToFile(); 
+                // saveContacts(); 
             }
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
             JOptionPane.showMessageDialog(this, "Error loading contacts: " + e.getMessage());
+        }
+    }
+
+    // Method to save contactsSet to "contact.dat"
+    private void saveContacts() {
+        try (FileOutputStream fos = new FileOutputStream("contact.dat");
+             ObjectOutputStream oos = new ObjectOutputStream(fos)) {
+            oos.writeObject(contactsSet);
+        } catch (IOException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error saving contacts: " + e.getMessage());
         }
     }
 } // End of ContactsFrame Class
@@ -819,12 +894,14 @@ class GroupMain extends JFrame{
 	JTable groupInfoTBL,contactInfoTBL;
 	JLabel titleLBL,tableLBL,grpLBL;
 	DefaultTableModel grpiModel,ctiModel;
-	
-	public GroupMain() {
+    private ContactsFrame contactsFrameInstance; // Added field
+
+	public GroupMain(ContactsFrame cFrame) { // Modified constructor
+        this.contactsFrameInstance = cFrame;
 		setTitle("group main");
 		setLayout(null);
-		agrp=new AddNewGroup();
-		ugrp=new UpdateGroup();
+		agrp=new AddNewGroup(); // Assuming these don't need contactsFrameInstance immediately
+		ugrp=new UpdateGroup();   // Assuming these don't need contactsFrameInstance immediately
 		titleLBL=new JLabel("Gestion des contact");
 		titleLBL.setBounds(150,5,150,25);
 		add(titleLBL);
@@ -868,7 +945,38 @@ class GroupMain extends JFrame{
 				agrp.setSize(400,400);
 			}
 		});
+        // Call refreshGroupTable at the end of the constructor
+        refreshGroupTable();
 	}
+
+    public void refreshGroupTable() {
+        if (contactsFrameInstance == null || contactsFrameInstance.contactsSet == null) {
+            grpiModel.setRowCount(0); // Clear table if no data source
+            return;
+        }
+
+        java.util.Map<String, Integer> groupCounts = new java.util.HashMap<>();
+        Set<Contact> allContacts = contactsFrameInstance.contactsSet;
+
+        if (allContacts != null) {
+            for (Contact contact : allContacts) {
+                if (contact.getGroups() != null && !contact.getGroups().isEmpty()) {
+                    for (String groupName : contact.getGroups()) {
+                        groupCounts.put(groupName, groupCounts.getOrDefault(groupName, 0) + 1);
+                    }
+                } else {
+                     // Optional: Count contacts with no group under a special name like "[No Group]"
+                     // groupCounts.put("[No Group]", groupCounts.getOrDefault("[No Group]", 0) + 1);
+                }
+            }
+        }
+
+        grpiModel.setRowCount(0); // Clear existing rows
+
+        for (java.util.Map.Entry<String, Integer> entry : groupCounts.entrySet()) {
+            grpiModel.addRow(new Object[]{entry.getKey(), entry.getValue()});
+        }
+    }
 }
 
 class AddNewGroup extends JFrame{
@@ -955,6 +1063,122 @@ class UpdateGroup extends JFrame{
 	}
 }
 
+// ViewContactFrame class
+class ViewContactFrame extends JFrame {
+    private Contact contact;
+
+    public ViewContactFrame(Contact contact) {
+        super("View Contact"); // Or setTitle("View Contact");
+        this.contact = contact;
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+
+        setLayout(new java.awt.GridBagLayout());
+        java.awt.GridBagConstraints gbc = new java.awt.GridBagConstraints();
+        gbc.insets = new java.awt.Insets(5, 5, 5, 5); // Margins
+        gbc.fill = java.awt.GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+
+        // First Name
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.anchor = java.awt.GridBagConstraints.WEST;
+        add(new JLabel("First Name:"), gbc);
+
+        gbc.gridx = 1;
+        JTextField firstNameField = new JTextField(contact.getFirstName());
+        firstNameField.setEditable(false);
+        add(firstNameField, gbc);
+
+        // Last Name
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        add(new JLabel("Last Name:"), gbc);
+
+        gbc.gridx = 1;
+        JTextField lastNameField = new JTextField(contact.getLastName());
+        lastNameField.setEditable(false);
+        add(lastNameField, gbc);
+
+        // City
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        add(new JLabel("City:"), gbc);
+
+        gbc.gridx = 1;
+        JTextField cityField = new JTextField(contact.getCity());
+        cityField.setEditable(false);
+        add(cityField, gbc);
+
+        // Phone Numbers
+        gbc.gridx = 0;
+        gbc.gridy = 3;
+        add(new JLabel("Phone Numbers:"), gbc);
+
+        gbc.gridx = 1;
+        gbc.gridheight = 2; // Span multiple rows if needed
+        gbc.fill = java.awt.GridBagConstraints.BOTH; // Allow vertical expansion
+        gbc.weighty = 1.0; // Allow vertical expansion
+        JTextArea phoneNumbersArea = new JTextArea(5, 20);
+        phoneNumbersArea.setEditable(false);
+        StringBuilder sb = new StringBuilder();
+        for (PhoneNumber pn : contact.getPhoneNumbers()) {
+            sb.append(pn.getRegion()).append(": ").append(pn.getPnbr()).append("\n");
+        }
+        phoneNumbersArea.setText(sb.toString());
+        JScrollPane phoneScrollPane = new JScrollPane(phoneNumbersArea);
+        add(phoneScrollPane, gbc);
+        
+        gbc.gridheight = 1; // Reset grid height
+        gbc.weighty = 0;    // Reset weighty
+
+        // Groups
+        gbc.gridx = 0;
+        gbc.gridy = 5; // Adjusted gridy
+        add(new JLabel("Groups:"), gbc);
+
+        gbc.gridx = 1;
+        gbc.gridheight = 2; // Span multiple rows if needed
+        gbc.fill = java.awt.GridBagConstraints.BOTH; // Allow vertical expansion
+        gbc.weighty = 1.0; // Allow vertical expansion
+        JTextArea groupsArea = new JTextArea(3, 20);
+        groupsArea.setEditable(false);
+        StringBuilder grpSb = new StringBuilder();
+        if (contact.getGroups() == null || contact.getGroups().isEmpty()) {
+            grpSb.append("No groups");
+        } else {
+            for (String group : contact.getGroups()) {
+                grpSb.append(group).append("\n");
+            }
+        }
+        groupsArea.setText(grpSb.toString());
+        JScrollPane groupScrollPane = new JScrollPane(groupsArea);
+        add(groupScrollPane, gbc);
+
+        gbc.gridheight = 1; // Reset grid height
+        gbc.weighty = 0;    // Reset weighty
+
+
+        // Close Button
+        gbc.gridx = 0;
+        gbc.gridy = 7; // Adjusted gridy
+        gbc.gridwidth = 2; // Span both columns
+        gbc.anchor = java.awt.GridBagConstraints.CENTER;
+        gbc.fill = java.awt.GridBagConstraints.NONE;
+        JButton closeButton = new JButton("Close");
+        closeButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                dispose(); // Close the dialog
+            }
+        });
+        add(closeButton, gbc);
+
+        setSize(350, 400); // Set a preferred size
+        // pack(); // Alternatively, use pack() for automatic sizing.
+        setLocationRelativeTo(null); // Center on screen
+    }
+}
+
+
 // PrjctDemo class (main method)
 public class PrjctDemo {
     public static void main(String[] args) {
@@ -968,3 +1192,15 @@ public class PrjctDemo {
         });
     }
 }
+
+// Make sure Contact and PhoneNumber classes are defined or imported correctly.
+// Assuming Contact class has:
+// String getFirstName()
+// String getLastName()
+// String getCity()
+// List<PhoneNumber> getPhoneNumbers()
+// Set<String> getGroups()
+
+// Assuming PhoneNumber class has:
+// String getRegion()
+// String getPnbr()
