@@ -945,6 +945,48 @@ class GroupMain extends JFrame{
 				agrp.setSize(400,400);
 			}
 		});
+
+        groupInfoTBL.getSelectionModel().addListSelectionListener(new javax.swing.event.ListSelectionListener() {
+            public void valueChanged(javax.swing.event.ListSelectionEvent event) {
+                if (!event.getValueIsAdjusting()) { // Important to prevent multiple events
+                    int selectedRow = groupInfoTBL.getSelectedRow();
+                    ctiModel.setRowCount(0); // Clear the contact details table
+
+                    if (selectedRow != -1) {
+                        String selectedGroupName = (String) grpiModel.getValueAt(selectedRow, 0); // Group name is in column 0
+
+                        if (contactsFrameInstance != null && contactsFrameInstance.contactsSet != null) {
+                            Set<Contact> allContacts = contactsFrameInstance.contactsSet;
+                            List<Contact> sortedContactsInGroup = new ArrayList<>(); // To sort contacts before display
+
+                            for (Contact contact : allContacts) {
+                                if (contact.getGroups() != null && contact.getGroups().contains(selectedGroupName)) {
+                                    sortedContactsInGroup.add(contact);
+                                }
+                            }
+                            
+                            // Optional: Sort the contacts, e.g., by first name then last name
+                            Collections.sort(sortedContactsInGroup, new Comparator<Contact>() {
+                                public int compare(Contact c1, Contact c2) {
+                                    int fnComp = c1.getFirstName().compareToIgnoreCase(c2.getFirstName());
+                                    if (fnComp != 0) {
+                                        return fnComp;
+                                    }
+                                    return c1.getLastName().compareToIgnoreCase(c2.getLastName());
+                                }
+                            });
+
+                            for (Contact contact : sortedContactsInGroup) {
+                                ctiModel.addRow(new Object[]{
+                                    contact.getFirstName() + " " + contact.getLastName(),
+                                    contact.getCity()
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        });
         // Call refreshGroupTable at the end of the constructor
         refreshGroupTable();
 	}
