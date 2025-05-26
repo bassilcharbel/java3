@@ -57,13 +57,16 @@ public class Contact extends Observable implements Serializable, Comparable<Cont
         return this.groups;
     }
 
-    public void addGroup(String group) {
-        if (group != null && !group.trim().isEmpty()) {
-            if (this.groups.add(group)) { // only notify if the group was actually added
+    public boolean addGroup(String groupName) {
+        if (groupName != null && !groupName.trim().isEmpty()) {
+            boolean added = this.groups.add(groupName.trim());
+            if (added) { // only notify if the group was actually added
                 setChanged();
                 notifyObservers();
             }
+            return added;
         }
+        return false; // If groupName is null or empty, nothing was added.
     }
 
     public void removeGroup(String group) {
