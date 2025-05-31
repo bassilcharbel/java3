@@ -170,9 +170,7 @@ class ContactsFrame extends JFrame {
                 }
                 List<Contact> sortedList = new ArrayList<>(contactsSet);
                 Collections.sort(sortedList, Contact.FirstNameComparator);
-                contactsSet.clear();
-                contactsSet.addAll(sortedList);
-                refreshContactsListModel();
+                updateContactsListModelFromList(sortedList); // Use the new method
             }
         });
 
@@ -184,9 +182,7 @@ class ContactsFrame extends JFrame {
                 }
                 List<Contact> sortedList = new ArrayList<>(contactsSet);
                 Collections.sort(sortedList, Contact.LastNameComparator);
-                contactsSet.clear();
-                contactsSet.addAll(sortedList);
-                refreshContactsListModel();
+                updateContactsListModelFromList(sortedList); // Use the new method
             }
         });
 
@@ -198,9 +194,7 @@ class ContactsFrame extends JFrame {
                 }
                 List<Contact> sortedList = new ArrayList<>(contactsSet);
                 Collections.sort(sortedList, Contact.CityComparator);
-                contactsSet.clear();
-                contactsSet.addAll(sortedList);
-                refreshContactsListModel();
+                updateContactsListModelFromList(sortedList); // Use the new method
             }
         });
 
@@ -348,6 +342,17 @@ class ContactsFrame extends JFrame {
             }
         });
     } // End of ContactsFrame Constructor
+
+    private void updateContactsListModelFromList(List<Contact> listToDisplay) {
+        contactsLSTMDL.clear();
+        for (Contact c : listToDisplay) {
+            if (!c.getPhoneNumbers().isEmpty()) {
+                contactsLSTMDL.addElement(c.getFirstName() + " " + c.getLastName() + " - " + c.getCity());
+            } else {
+                contactsLSTMDL.addElement(c.getFirstName() + " " + c.getLastName() + " - " + c.getCity() + " (No Numbers)");
+            }
+        }
+    }
 
     private void refreshContactsListModel() {
         contactsLSTMDL.clear();
