@@ -1,6 +1,7 @@
 import java.util.List;
 import java.util.Objects;
 import java.util.Observable;
+import java.util.Observer;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.ArrayList;
@@ -14,6 +15,8 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -77,7 +80,7 @@ class mainContact extends JFrame {
 
 
 // ContactsFrame class (Refactored)
-class ContactsFrame extends JFrame {
+class ContactsFrame extends JFrame implements Observer {
     // Shared data models
     Set<Contact> contactsSet = new TreeSet<>();
     DefaultListModel<String> contactsLSTMDL = new DefaultListModel<>();
@@ -281,12 +284,17 @@ class ContactsFrame extends JFrame {
                                 "Are you sure you want to delete " + contactToDelete.getFirstName() + " " + contactToDelete.getLastName() + "?",
                                 "Confirm Deletion", JOptionPane.YES_NO_OPTION);
                         if (confirmation == JOptionPane.YES_OPTION) {
+                            // Delete observer before removing from the set
+                            contactToDelete.deleteObserver(ContactsFrame.this);
                             if (contactsSet.remove(contactToDelete)) {
                                 contactsLSTMDL.remove(selectedIndex);
                                 saveContacts(); // Persist changes
                                 JOptionPane.showMessageDialog(ContactsFrame.this, "Contact deleted successfully.");
                             } else {
                                 JOptionPane.showMessageDialog(ContactsFrame.this, "Error: Could not delete contact from the set.");
+                                // If removal failed, theoretically, we might want to add the observer back.
+                                // However, if .remove fails, the state is already problematic.
+                                // For now, this is sufficient.
                             }
                         }
                     } else {
@@ -305,7 +313,7 @@ class ContactsFrame extends JFrame {
 
         newCBTN.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                nwctf = new AddNewContactFrame(contactsSet, contactsLSTMDL, null, -1, true);
+                nwctf = new AddNewContactFrame(contactsSet, contactsLSTMDL, null, -1, true, ContactsFrame.this);
                 nwctf.setSize(450, 480); 
                 nwctf.setLocationRelativeTo(ContactsFrame.this); 
                 nwctf.setVisible(true);
@@ -329,7 +337,7 @@ class ContactsFrame extends JFrame {
                     }
 
                     if (selectedContact != null) {
-                        ucf = new UpdateContactFrame(contactsSet, contactsLSTMDL, selectedContact, selectedIdx);
+                        ucf = new UpdateContactFrame(contactsSet, contactsLSTMDL, selectedContact, selectedIdx, ContactsFrame.this);
                         ucf.setSize(450, 480); 
                         ucf.setLocationRelativeTo(ContactsFrame.this); 
                         ucf.setVisible(true);
@@ -338,6 +346,17 @@ class ContactsFrame extends JFrame {
                     }
                 } else {
                     JOptionPane.showMessageDialog(ContactsFrame.this, "Please select a contact to update.");
+                }
+            }
+        });
+
+        // Add WindowListener to remove observers when the frame is closing
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent windowEvent) {
+                System.out.println("ContactsFrame is closing, removing observers.");
+                for (Contact c : contactsSet) {
+                    c.deleteObserver(ContactsFrame.this);
                 }
             }
         });
@@ -382,6 +401,10 @@ class ContactsFrame extends JFrame {
                 // Optionally, could re-save in Set format here if desired
                 // saveContacts(); 
             }
+            // Add observers to loaded contacts
+            for (Contact c : contactsSet) {
+                c.addObserver(this);
+            }
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
             JOptionPane.showMessageDialog(this, "Error loading contacts: " + e.getMessage());
@@ -396,6 +419,16 @@ class ContactsFrame extends JFrame {
         } catch (IOException e) {
             e.printStackTrace();
             JOptionPane.showMessageDialog(this, "Error saving contacts: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void update(Observable o, Object arg) {
+        if (o instanceof Contact) {
+            // For now, a full refresh is acceptable.
+            refreshContactsListModel();
+            // Debugging/verification print statement
+            System.out.println("ContactsFrame observed a change in: " + ((Contact) o).getFirstName());
         }
     }
 } // End of ContactsFrame Class
@@ -414,11 +447,13 @@ class AddNewContactFrame extends JFrame {
     Contact oldContact; // Used if editing
     int selectedIndex;  // Used if editing
     boolean newRec;     // True if adding new, false if editing
+    ContactsFrame parentFrame; // Reference to the parent ContactsFrame
 
     public AddNewContactFrame(Set<Contact> sharedContactsSet, DefaultListModel<String> sharedContactsLSTMDL,
-                              Contact oldContact, int index, boolean newRec) {
+                              Contact oldContact, int index, boolean newRec, ContactsFrame parentFrame) {
         this.contactsSet = sharedContactsSet;
         this.contactsLSTMDL = sharedContactsLSTMDL;
+        this.parentFrame = parentFrame;
         this.oldContact = oldContact;
         this.selectedIndex = index;
         this.newRec = newRec;
@@ -607,6 +642,10 @@ class AddNewContactFrame extends JFrame {
 
         if (newRec) { 
             if (contactsSet.add(currentContact)) {
+                // Add observer if parentFrame is available
+                if (parentFrame != null) {
+                    currentContact.addObserver(parentFrame);
+                }
                 // Use the consistent display string: firstName + " " + lastName + " - " + city
                 contactsLSTMDL.addElement(listDisplayString); 
                 JOptionPane.showMessageDialog(this, "Contact saved successfully.");
@@ -618,6 +657,14 @@ class AddNewContactFrame extends JFrame {
         } else { // Editing existing contact
             if (oldContact != null && contactsSet.remove(oldContact)) {
                 if (contactsSet.add(currentContact)) {
+                    // Add observer if parentFrame is available (also for updated contacts, though this part is in AddNewContactFrame)
+                    // This logic might be more relevant if AddNewContactFrame was also for updating,
+                    // but for now, it handles adding new contacts.
+                    // If an existing contact is being replaced (e.g. due to re-adding after some modification logic not shown here)
+                    // then adding the observer is still correct.
+                    if (parentFrame != null) {
+                        currentContact.addObserver(parentFrame);
+                    }
                     // Use the consistent display string: firstName + " " + lastName + " - " + city
                     contactsLSTMDL.setElementAt(listDisplayString, selectedIndex);
                     JOptionPane.showMessageDialog(this, "Contact updated successfully.");
@@ -696,11 +743,13 @@ class UpdateContactFrame extends JFrame {
     JButton saveBTN, cancelBTN, addPhoneRowBTN; // Added addPhoneRowBTN
     JTable phonenbrTBL;
     DefaultTableModel ctsModel;
+    ContactsFrame parentFrame_ucf; // To add/delete observer for updated contact
 
-    public UpdateContactFrame(Set<Contact> sharedContactsSet, DefaultListModel<String> sharedContactsLSTMDL, Contact contactToUpdate, int contactIndex) {
+    public UpdateContactFrame(Set<Contact> sharedContactsSet, DefaultListModel<String> sharedContactsLSTMDL, Contact contactToUpdate, int contactIndex, ContactsFrame parent) {
         this.contactsSet = sharedContactsSet;
         this.contactsLSTMDL = sharedContactsLSTMDL;
         this.contactToUpdate = contactToUpdate;
+        this.parentFrame_ucf = parent;
         this.contactIndex = contactIndex;
 
         setTitle("Update Contact");
@@ -861,14 +910,27 @@ class UpdateContactFrame extends JFrame {
         // grpCHK (No Group) is handled by the absence of other selections.
 
         // Critical: remove the original instance, then add the new one.
+        // Also, remove observer from old contact before removing it
+        if (contactToUpdate != null && parentFrame_ucf != null) {
+            contactToUpdate.deleteObserver(parentFrame_ucf);
+        }
+
         if (contactsSet.remove(contactToUpdate)) {
             if (contactsSet.add(updatedContact)) {
+                // Add observer to the new (updated) contact object
+                if (parentFrame_ucf != null) {
+                    updatedContact.addObserver(parentFrame_ucf);
+                }
                 contactsLSTMDL.setElementAt(firstName + " " + lastName + " - " + city, contactIndex);
                 JOptionPane.showMessageDialog(this, "Contact updated successfully.");
                 writeContactsToFile(); // Persist the entire shared set
                 dispose();
             } else {
                 contactsSet.add(contactToUpdate); // Rollback: re-add original if new one is duplicate
+                // If rollback, re-add observer to the old contact
+                if (contactToUpdate != null && parentFrame_ucf != null) {
+                    contactToUpdate.addObserver(parentFrame_ucf);
+                }
                 JOptionPane.showMessageDialog(this, "Update failed. The updated contact details might conflict with another existing contact.");
             }
         } else {
@@ -892,7 +954,7 @@ class UpdateContactFrame extends JFrame {
 }
 
 // GroupMain, AddNewGroup, UpdateGroup classes (assuming no changes for this subtask)
-class GroupMain extends JFrame{
+class GroupMain extends JFrame implements Observer {
 	AddNewGroup agrp;
 	UpdateGroup ugrp;
 	JButton addBTN,updateBTN,deleteBTN;
@@ -1043,7 +1105,69 @@ class GroupMain extends JFrame{
         });
         // Call refreshGroupTable at the end of the constructor
         refreshGroupTable();
+
+        // Add GroupMain as an observer to all existing contacts
+        if (contactsFrameInstance != null && contactsFrameInstance.contactsSet != null) {
+            for (Contact c : contactsFrameInstance.contactsSet) {
+                c.addObserver(this);
+            }
+            System.out.println("GroupMain is now observing " + contactsFrameInstance.contactsSet.size() + " contacts.");
+        }
+
+        // Add WindowListener to remove observers when the frame is closing
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent windowEvent) {
+                System.out.println("GroupMain is closing, removing its observers from contacts.");
+                if (contactsFrameInstance != null && contactsFrameInstance.contactsSet != null) {
+                    for (Contact c : contactsFrameInstance.contactsSet) {
+                        c.deleteObserver(GroupMain.this);
+                    }
+                }
+            }
+        });
 	}
+
+    @Override
+    public void update(Observable o, Object arg) {
+        if (o instanceof Contact) {
+            System.out.println("GroupMain observed a change in: " + ((Contact) o).getFirstName() + ", refreshing group table.");
+            refreshGroupTable(); // Refresh group names and counts
+
+            // Refresh selected group's contact list
+            int selectedRow = groupInfoTBL.getSelectedRow();
+            if (selectedRow != -1) {
+                String selectedGroupName = (String) grpiModel.getValueAt(selectedRow, 0);
+                ctiModel.setRowCount(0); // Clear the contact details table
+
+                if (contactsFrameInstance != null && contactsFrameInstance.contactsSet != null) {
+                    System.out.println("GroupMain refreshing contact list for selected group: " + selectedGroupName);
+                    List<Contact> sortedContactsInGroup = new ArrayList<>();
+                    for (Contact contactInSet : contactsFrameInstance.contactsSet) {
+                        if (contactInSet.getGroups() != null && contactInSet.getGroups().contains(selectedGroupName)) {
+                            sortedContactsInGroup.add(contactInSet);
+                        }
+                    }
+                    // Optional: Sort the contacts, e.g., by first name then last name
+                    Collections.sort(sortedContactsInGroup, new Comparator<Contact>() {
+                        public int compare(Contact c1, Contact c2) {
+                            int fnComp = c1.getFirstName().compareToIgnoreCase(c2.getFirstName());
+                            if (fnComp != 0) {
+                                return fnComp;
+                            }
+                            return c1.getLastName().compareToIgnoreCase(c2.getLastName());
+                        }
+                    });
+                    for (Contact contactToDisplay : sortedContactsInGroup) {
+                        ctiModel.addRow(new Object[]{
+                            contactToDisplay.getFirstName() + " " + contactToDisplay.getLastName(),
+                            contactToDisplay.getCity()
+                        });
+                    }
+                }
+            }
+        }
+    }
 
     public void refreshGroupTable() {
         if (contactsFrameInstance == null || contactsFrameInstance.contactsSet == null) {
@@ -1388,12 +1512,19 @@ class UpdateGroup extends JFrame{
 }
 
 // ViewContactFrame class
-class ViewContactFrame extends JFrame {
+class ViewContactFrame extends JFrame implements Observer {
     private Contact contact;
+    private JTextField firstNameField, lastNameField, cityField; // Made fields accessible to update method
+    private JTextArea phoneNumbersArea, groupsArea; // Made fields accessible to update method
+
 
     public ViewContactFrame(Contact contact) {
         super("View Contact"); // Or setTitle("View Contact");
         this.contact = contact;
+        if (this.contact != null) {
+            this.contact.addObserver(this);
+            System.out.println("ViewContactFrame is now observing: " + this.contact.getFirstName());
+        }
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 
         setLayout(new java.awt.GridBagLayout());
@@ -1409,7 +1540,7 @@ class ViewContactFrame extends JFrame {
         add(new JLabel("First Name:"), gbc);
 
         gbc.gridx = 1;
-        JTextField firstNameField = new JTextField(contact.getFirstName());
+        firstNameField = new JTextField(contact.getFirstName());
         firstNameField.setEditable(false);
         add(firstNameField, gbc);
 
@@ -1419,7 +1550,7 @@ class ViewContactFrame extends JFrame {
         add(new JLabel("Last Name:"), gbc);
 
         gbc.gridx = 1;
-        JTextField lastNameField = new JTextField(contact.getLastName());
+        lastNameField = new JTextField(contact.getLastName());
         lastNameField.setEditable(false);
         add(lastNameField, gbc);
 
@@ -1429,7 +1560,7 @@ class ViewContactFrame extends JFrame {
         add(new JLabel("City:"), gbc);
 
         gbc.gridx = 1;
-        JTextField cityField = new JTextField(contact.getCity());
+        cityField = new JTextField(contact.getCity());
         cityField.setEditable(false);
         add(cityField, gbc);
 
@@ -1442,11 +1573,13 @@ class ViewContactFrame extends JFrame {
         gbc.gridheight = 2; // Span multiple rows if needed
         gbc.fill = java.awt.GridBagConstraints.BOTH; // Allow vertical expansion
         gbc.weighty = 1.0; // Allow vertical expansion
-        JTextArea phoneNumbersArea = new JTextArea(5, 20);
+        phoneNumbersArea = new JTextArea(5, 20);
         phoneNumbersArea.setEditable(false);
         StringBuilder sb = new StringBuilder();
-        for (PhoneNumber pn : contact.getPhoneNumbers()) {
-            sb.append(pn.getRegion()).append(": ").append(pn.getPnbr()).append("\n");
+        if (this.contact != null && this.contact.getPhoneNumbers() != null) {
+            for (PhoneNumber pn : this.contact.getPhoneNumbers()) {
+                sb.append(pn.getRegion()).append(": ").append(pn.getPnbr()).append("\n");
+            }
         }
         phoneNumbersArea.setText(sb.toString());
         JScrollPane phoneScrollPane = new JScrollPane(phoneNumbersArea);
@@ -1464,15 +1597,15 @@ class ViewContactFrame extends JFrame {
         gbc.gridheight = 2; // Span multiple rows if needed
         gbc.fill = java.awt.GridBagConstraints.BOTH; // Allow vertical expansion
         gbc.weighty = 1.0; // Allow vertical expansion
-        JTextArea groupsArea = new JTextArea(3, 20);
+        groupsArea = new JTextArea(3, 20);
         groupsArea.setEditable(false);
         StringBuilder grpSb = new StringBuilder();
-        if (contact.getGroups() == null || contact.getGroups().isEmpty()) {
-            grpSb.append("No groups");
-        } else {
-            for (String group : contact.getGroups()) {
+        if (this.contact != null && this.contact.getGroups() != null && !this.contact.getGroups().isEmpty()) {
+            for (String group : this.contact.getGroups()) {
                 grpSb.append(group).append("\n");
             }
+        } else {
+            grpSb.append("No groups");
         }
         groupsArea.setText(grpSb.toString());
         JScrollPane groupScrollPane = new JScrollPane(groupsArea);
@@ -1491,14 +1624,56 @@ class ViewContactFrame extends JFrame {
         JButton closeButton = new JButton("Close");
         closeButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
+                if (ViewContactFrame.this.contact != null) {
+                    ViewContactFrame.this.contact.deleteObserver(ViewContactFrame.this);
+                    System.out.println("ViewContactFrame (close button) removed observer for: " + ViewContactFrame.this.contact.getFirstName());
+                }
                 dispose(); // Close the dialog
             }
         });
         add(closeButton, gbc);
 
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent windowEvent) {
+                if (ViewContactFrame.this.contact != null) {
+                    ViewContactFrame.this.contact.deleteObserver(ViewContactFrame.this);
+                    System.out.println("ViewContactFrame (windowClosing) removed observer for: " + ViewContactFrame.this.contact.getFirstName());
+                }
+            }
+        });
+
         setSize(350, 400); // Set a preferred size
         // pack(); // Alternatively, use pack() for automatic sizing.
         setLocationRelativeTo(null); // Center on screen
+    }
+
+    @Override
+    public void update(Observable o, Object arg) {
+        if (o == this.contact) {
+            firstNameField.setText(this.contact.getFirstName());
+            lastNameField.setText(this.contact.getLastName());
+            cityField.setText(this.contact.getCity());
+
+            StringBuilder sb = new StringBuilder();
+            if (this.contact.getPhoneNumbers() != null) {
+                for (PhoneNumber pn : this.contact.getPhoneNumbers()) {
+                    sb.append(pn.getRegion()).append(": ").append(pn.getPnbr()).append("\n");
+                }
+            }
+            phoneNumbersArea.setText(sb.toString());
+
+            StringBuilder grpSb = new StringBuilder();
+            if (this.contact.getGroups() == null || this.contact.getGroups().isEmpty()) {
+                grpSb.append("No groups");
+            } else {
+                for (String group : this.contact.getGroups()) {
+                    grpSb.append(group).append("\n");
+                }
+            }
+            groupsArea.setText(grpSb.toString());
+            System.out.println("ViewContactFrame updated for: " + this.contact.getFirstName());
+        }
     }
 }
 
